@@ -2,9 +2,10 @@
 set -e
 
 SOURCE_DIR="cdda-source"
+BUILD_DIR="build-cache"
 OUTPUT_DIR="web-output"
 
-echo "Starting CDDA WebAssembly build using official build scripts..."
+echo "Starting CDDA WebAssembly build with simplified configuration..."
 
 # Build configuration
 BUILD_TYPE="${BUILD_TYPE:-Release}"
@@ -28,54 +29,66 @@ if [ ! -d "$SOURCE_ABS_PATH" ]; then
   exit 1
 fi
 
-# Change to source directory to use official build scripts
-cd "$SOURCE_ABS_PATH"
+# Clean and create build directory
+if [ -d "$BUILD_DIR" ]; then
+  echo "Cleaning previous build..."
+  rm -rf "$BUILD_DIR"
+fi
+mkdir -p "$BUILD_DIR"
+cd "$BUILD_DIR"
 
-# Check if official Emscripten build scripts exist
-if [ ! -f "build-scripts/build-emscripten.sh" ]; then
-  echo "Error: CDDA official Emscripten build script not found"
-  echo "This version of CDDA may not include WebAssembly support"
+# Try basic CMake configuration first
+echo "Attempting basic CMake configuration..."
+emcmake cmake "$SOURCE_ABS_PATH" \
+  -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
+  -DCMAKE_TOOLCHAIN_FILE="$EMSDK/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake"
+
+if [ $? -ne 0 ]; then
+  echo "Basic CMake failed. Trying with minimal options..."
+  emcmake cmake "$SOURCE_ABS_PATH" \
+    -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
+    -DCMAKE_TOOLCHAIN_FILE="$EMSDK/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake" \
+    -DBUILD_TESTS=OFF \
+    -DCMAKE_INSTALL_PREFIX="$OUTPUT_DIR"
+fi
+
+if [ $? -ne 0 ]; then
+  echo "CMake configuration failed. This may indicate CDDA doesn't support Emscripten builds in this version."
+  echo "Checking if CDDA has WebAssembly build scripts..."
+  if [ -f "$SOURCE_ABS_PATH/build-scripts/build-emscripten.sh" ]; then
+    echo "Official Emscripten build script found, but may be disabled due to resource constraints."
+    echo "See PR #81827: 'Disable huge uncacheable emscripten builds'"
+  fi
   exit 1
 fi
 
-echo "Using official CDDA Emscripten build scripts..."
+# Try to build
+echo "Attempting to build..."
+emmake make -j$(nproc)
 
-# Run the official build scripts
-echo "Preparing web data..."
-if [ -f "build-scripts/prepare-web-data.sh" ]; then
-  chmod +x build-scripts/prepare-web-data.sh
-  ./build-scripts/prepare-web-data.sh
+# Check if build produced any executables
+if [ -f "cataclysm-tiles" ] || [ -f "cataclysm" ]; then
+  echo "Build successful, preparing WebAssembly output..."
+  
+  # Create output directory
+  mkdir -p "$OUTPUT_DIR"
+  
+  # If we got a regular executable, try to convert it to WebAssembly
+  EXECUTABLE=$(find . -name "cataclysm-tiles" -o -name "cataclysm" | head -n1)
+  if [ -n "$EXECUTABLE" ]; then
+    echo "Converting $EXECUTABLE to WebAssembly..."
+    emcc "$EXECUTABLE" \
+      -o "$OUTPUT_DIR/index.html" \
+      -s USE_SDL=2 \
+      -s ALLOW_MEMORY_GROWTH=1 \
+      -s WASM=1 \
+      -s MODULARIZE=1 \
+      -s EXPORT_NAME="Cataclysm"
+  fi
 else
-  echo "Warning: prepare-web-data.sh not found, skipping..."
-fi
-
-echo "Building with Emscripten..."
-chmod +x build-scripts/build-emscripten.sh
-./build-scripts/build-emscripten.sh
-
-echo "Preparing web bundle..."
-if [ -f "build-scripts/prepare-web.sh" ]; then
-  chmod +x build-scripts/prepare-web.sh
-  ./build-scripts/prepare-web.sh
-else
-  echo "Warning: prepare-web.sh not found, skipping..."
-fi
-
-# Find the web output directory
-WEB_OUTPUT_DIR=$(find "$SOURCE_ABS_PATH" -type d -name "web" | head -n1)
-if [ -z "$WEB_OUTPUT_DIR" ]; then
-  echo "Error: Could not find web output directory"
+  echo "No executable found after build. CDDA may not support Emscripten builds."
   exit 1
 fi
-
-echo "Found web output directory: $WEB_OUTPUT_DIR"
-
-# Create output directory
-mkdir -p "$OUTPUT_DIR"
-
-# Copy web output files
-echo "Copying web output files..."
-cp -r "$WEB_OUTPUT_DIR"/* "$OUTPUT_DIR/"
 
 echo "Build completed successfully!"
 echo "Web output prepared in: $OUTPUT_DIR"
