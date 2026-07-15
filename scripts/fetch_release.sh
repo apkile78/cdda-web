@@ -32,8 +32,23 @@ wget -O "cataclysm-dda-${RELEASE_TAG}.tar.gz" "https://github.com/${CDDA_REPO}/a
 # Extract the tarball
 echo "Extracting tarball..."
 tar -xzf "cataclysm-dda-${RELEASE_TAG}.tar.gz"
-mv "cataclysm-dda-${RELEASE_TAG#v}"/* .
-rm -rf "cataclysm-dda-${RELEASE_TAG#v}"
+
+# Find the extracted directory (handle different naming conventions)
+EXTRACTED_DIR=$(find . -maxdepth 1 -type d -name "Cataclysm-DDA-*" | head -n1)
+if [ -z "$EXTRACTED_DIR" ]; then
+  # Try alternative naming pattern
+  EXTRACTED_DIR=$(find . -maxdepth 1 -type d -name "cataclysm-dda-*" | head -n1)
+fi
+
+if [ -z "$EXTRACTED_DIR" ]; then
+  echo "Error: Could not find extracted directory"
+  ls -la
+  exit 1
+fi
+
+echo "Found extracted directory: $EXTRACTED_DIR"
+mv "$EXTRACTED_DIR"/* .
+rm -rf "$EXTRACTED_DIR"
 rm "cataclysm-dda-${RELEASE_TAG}.tar.gz"
 
 echo "Source fetched successfully to: $SOURCE_DIR"
