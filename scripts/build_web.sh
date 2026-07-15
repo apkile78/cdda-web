@@ -27,9 +27,19 @@ fi
 mkdir -p "$BUILD_DIR"
 cd "$BUILD_DIR"
 
+# Use absolute path for source directory
+SOURCE_ABS_PATH="$(cd .. && pwd)/$SOURCE_DIR"
+echo "Source directory: $SOURCE_ABS_PATH"
+
+# Verify source directory exists
+if [ ! -d "$SOURCE_ABS_PATH" ]; then
+  echo "Error: Source directory not found at $SOURCE_ABS_PATH"
+  exit 1
+fi
+
 # Configure with CMake for Emscripten
 echo "Configuring CMake for Emscripten..."
-emcmake cmake "$SOURCE_DIR" \
+emcmake cmake "$SOURCE_ABS_PATH" \
   -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
   -DCMAKE_TOOLCHAIN_FILE="$EMSDK/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake" \
   -DTILES="$BUILD_TILES" \
@@ -64,8 +74,8 @@ emcc -o "$OUTPUT_DIR/cataclysm-tiles.html" \
   -s EXPORTED_RUNTIME_METHODS='["ccall","cwrap","UTF8ToString","stringToUTF8"]' \
   -s MODULARIZE=1 \
   -s EXPORT_NAME="Cataclysm" \
-  --embed-file "$SOURCE_DIR/data@/data" \
-  --embed-file "$SOURCE_DIR/lang@/lang" \
+  --embed-file "$SOURCE_ABS_PATH/data@/data" \
+  --embed-file "$SOURCE_ABS_PATH/lang@/lang" \
   -lidn \
   -lpthread
 
@@ -89,19 +99,19 @@ fi
 
 # Copy data directory (fallback if embedding fails)
 echo "Copying data directory..."
-if [ -d "$SOURCE_DIR/data" ]; then
-  cp -r "$SOURCE_DIR/data" "$OUTPUT_DIR/"
+if [ -d "$SOURCE_ABS_PATH/data" ]; then
+  cp -r "$SOURCE_ABS_PATH/data" "$OUTPUT_DIR/"
 fi
 
 # Copy required assets
 echo "Copying required assets..."
-if [ -d "$SOURCE_DIR/lang" ]; then
-  cp -r "$SOURCE_DIR/lang" "$OUTPUT_DIR/"
+if [ -d "$SOURCE_ABS_PATH/lang" ]; then
+  cp -r "$SOURCE_ABS_PATH/lang" "$OUTPUT_DIR/"
 fi
 
 # Copy font files if they exist
-if [ -d "$SOURCE_DIR/fonts" ]; then
-  cp -r "$SOURCE_DIR/fonts" "$OUTPUT_DIR/"
+if [ -d "$SOURCE_ABS_PATH/fonts" ]; then
+  cp -r "$SOURCE_ABS_PATH/fonts" "$OUTPUT_DIR/"
 fi
 
 echo "Build completed successfully!"
