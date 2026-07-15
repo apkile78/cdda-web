@@ -1,337 +1,224 @@
 <!DOCTYPE html>
-<html lang="en-us">
-  <head>
-    <script>
-  window.onerror = function(msg, url, line, col, err) {
-    document.body.innerHTML += '<pre style="color:red;background:black;padding:10px;white-space:pre-wrap;">ERROR: ' + msg + '\nAt: ' + url + ':' + line + '\n' + (err && err.stack ? err.stack : '') + '</pre>';
-    return false;
-  };
-  var origError = console.error;
-  console.error = function() {
-    var args = Array.prototype.slice.call(arguments).join(' ');
-    document.body.innerHTML += '<pre style="color:orange;background:black;padding:10px;">console.error: ' + args + '</pre>';
-    origError.apply(console, arguments);
-  };
-</script>
-    <meta charset="utf-8" />
-    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
-    <meta
-      name="viewport"
-      content="width=device-width, initial-scale=1, shrink-to-fit=no, minimum-scale=1, viewport-fit=cover, maximum-scale=1"
-    />
-    <title>Cataclysm: Dark Days Ahead</title>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cataclysm: Dark Days Ahead - WebAssembly</title>
     <style>
-      @font-face {
-        font-family: Terminus;
-        src: url("./Terminus.ttf");
-      }
-
-      html {
-        padding: 0;
-        margin: 0;
-
-        height: 100%;
-        overflow: hidden;
-      }
-
-      body {
-        padding: 0;
-        margin: 0;
-
-        height: 100%;
-        overflow: hidden;
-        background-color: grey;
-      }
-
-      canvas {
-        margin: 0;
-        padding: none;
-        border: 0px none;
-        background-color: black;
-        display: block;
-        position: absolute;
-        left: 0px;
-        top: 0px;
-        outline: none;
-
-        image-rendering: pixelated;
-        z-index: 1;
-      }
-
-      #loading-message {
-        color: white;
-        position: absolute;
-        top: 50%;
-        left: 50%;
-        font-size: 30px;
-        transform: translate(-50%, -50%);
-        text-align: center;
-        font-family: Terminus, monospace;
-        z-index: 4;
-      }
-
-      #settings-gear {
-        color: white;
-        opacity: 0.5;
-        position: absolute;
-        top: 10px;
-        left: 10px;
-        z-index: 2;
-        font-size: 20px;
-        cursor: pointer;
-      }
-
-      #settings-gear:hover {
-        opacity: 1;
-      }
-
-      #settings-menu {
-        color: white;
-        background-color: black;
-        z-index: 3;
-        position: absolute;
-        top: 40px;
-        left: 10px;
-        display: flex;
-        flex-direction: column;
-        border-radius: 5px;
-        padding: 15px;
-        align-items: stretch;
-        border-color: white;
-        border-style: solid;
-      }
-
-      .menu-button {
-        font-family: Terminus, monospace;
-        font-size: 20px;
-        cursor: pointer;
-        opacity: 0.7;
-      }
-
-      .menu-button:hover {
-        opacity: 1;
-      }
-
-      a {
-        color: white;
-        text-decoration: none;
-      }
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #1a1a1a;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            font-family: 'Courier New', monospace;
+            color: #e0e0e0;
+        }
+        
+        #game-container {
+            position: relative;
+            width: 100%;
+            max-width: 1280px;
+            height: 720px;
+            background-color: #000;
+            border: 2px solid #333;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+        }
+        
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+            z-index: 10;
+        }
+        
+        .spinner {
+            border: 4px solid #333;
+            border-top: 4px solid #4CAF50;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        #controls {
+            margin-top: 20px;
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            font-size: 14px;
+            cursor: pointer;
+            border-radius: 4px;
+            font-family: 'Courier New', monospace;
+        }
+        
+        button:hover {
+            background-color: #45a049;
+        }
+        
+        button:disabled {
+            background-color: #666;
+            cursor: not-allowed;
+        }
+        
+        #info {
+            margin-top: 20px;
+            text-align: center;
+            font-size: 12px;
+            color: #888;
+        }
+        
+        canvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+        }
+        
+        .hidden {
+            display: none !important;
+        }
     </style>
-
-    <link
-      rel="stylesheet"
-      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.2.1/css/all.min.css"
-      integrity="sha512-MV7K8+y+gLIBoVD59lQIYicR65iaqukzvf/nwasF0nqhPay5w/9lJmVM2hMDcnK1OnMGCdVK+iQrJ7lzPJQd1w=="
-      crossorigin="anonymous"
-      referrerpolicy="no-referrer"
-    />
-
-    <script
-      defer
-      src="https://cdnjs.cloudflare.com/ajax/libs/screenfull.js/5.2.0/screenfull.min.js"
-      integrity="sha512-GoG2/bE6QSPKSrjuoII6iPL2ODnwUJvFgysFYLTW2ltpx6G5nj+mYvhPq5rLPZby0rdMFU2fo4BMlWND7+QZ5g=="
-      crossorigin="anonymous"
-      referrerpolicy="no-referrer"
-    ></script>
-    <script
-      defer
-      src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"
-      integrity="sha512-XMVd28F1oH/O71fzwBnV7HucLxVwtxf26XV8P4wPk26EDxuGZ91N8bsOttmnomcCD3CS5ZMRL50H0GgOHvegtg=="
-      crossorigin="anonymous"
-      referrerpolicy="no-referrer"
-    ></script>
-    <script
-      defer
-      src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.0/FileSaver.min.js"
-      integrity="sha512-csNcFYJniKjJxRWRV1R7fvnXrycHP6qDR21mgz1ZP55xY5d+aHLfo9/FcGDQLfn2IfngbAHd8LdfsagcCqgTcQ=="
-      crossorigin="anonymous"
-      referrerpolicy="no-referrer"
-    ></script>
-
-    <link rel="shortcut icon" href="favicon.ico" />
-    <meta property="og:image" content="preview-image.png" />
-    <meta property="og:title" content="Cataclysm: Dark Days Ahead" />
-    <meta
-      property="og:description"
-      content="A port of Cataclysm: Dark Days Ahead for the browser."
-    />
-  </head>
-  <body>
-    <div id="settings-gear"><i class="fa-solid fa-gear"></i></div>
-    <div id="settings-menu" style="display: none">
-      <div style="margin-bottom: 10px">
-        <div id="toggle-fullscreen" class="menu-button">
-          <i class="fa-solid fa-expand"></i
-          ><span style="margin-left: 0.7em">Toggle Fullscreen</span>
+</head>
+<body>
+    <div id="game-container">
+        <div id="loading">
+            <div class="spinner"></div>
+            <p>Loading Cataclysm: Dark Days Ahead...</p>
+            <p id="progress">Initializing...</p>
         </div>
-      </div>
-      <div style="margin-bottom: 10px">
-        <div id="export-saves" class="menu-button">
-          <i class="fa-solid fa-download"></i
-          ><span style="margin-left: 0.7em">Export Saves</span>
-        </div>
-      </div>
-      <div>
-        <a
-          target="_blank"
-          href="https://github.com/CleverRaven/Cataclysm-DDA"
-        >
-          <div id="browse-code" class="menu-button">
-            <i class="fa-brands fa-github"></i
-            ><span style="margin-left: 0.7em">Browse Code</span>
-          </div>
-        </a>
-      </div>
+        <canvas id="game-canvas"></canvas>
+    </div>
+    
+    <div id="controls">
+        <button id="fullscreen" onclick="toggleFullscreen()">Fullscreen</button>
+        <button id="restart" onclick="restartGame()">Restart Game</button>
+        <button id="help" onclick="showHelp()">Controls Help</button>
+    </div>
+    
+    <div id="info">
+        <p>Cataclysm: Dark Days Ahead - WebAssembly Build</p>
+        <p>Build version: <span id="build-version">Loading...</span></p>
     </div>
 
-    <canvas
-      id="canvas"
-      style="
-        width: 100%;
-        height: 100%;
-        min-width: 640px;
-        min-height: 384px;
-      "
-      tabindex="-1"
-    ></canvas>
-    <div id="loading-message">Loading...</div>
-
-    <script type="text/javascript">
-      const canvas = document.getElementById("canvas");
-      const loadingMessage = document.getElementById("loading-message");
-      const settingsMenu = document.getElementById("settings-menu");
-
-      window.addEventListener("menuready", () => {
-        loadingMessage.style.display = "none";
-      });
-
-      document.getElementById("settings-gear").onclick = () => {
-        if (settingsMenu.style.display === "none") {
-          settingsMenu.style.display = "inherit";
-        } else {
-          settingsMenu.style.display = "none";
+    <script>
+        const loadingElement = document.getElementById('loading');
+        const progressElement = document.getElementById('progress');
+        const buildVersionElement = document.getElementById('build-version');
+        const gameCanvas = document.getElementById('game-canvas');
+        
+        let Module = null;
+        let gameInstance = null;
+        
+        // Load build version
+        fetch('BUILD_VERSION')
+            .then(response => response.text())
+            .then(version => {
+                buildVersionElement.textContent = version.trim();
+            })
+            .catch(() => {
+                buildVersionElement.textContent = 'Unknown';
+            });
+        
+        // Initialize game
+        function initGame() {
+            Module = {
+                canvas: gameCanvas,
+                onRuntimeInitialized: function() {
+                    loadingElement.classList.add('hidden');
+                    console.log('CDDA WebAssembly initialized');
+                },
+                print: function(text) {
+                    console.log(text);
+                },
+                printErr: function(text) {
+                    console.error(text);
+                },
+                setStatus: function(text) {
+                    if (text) {
+                        progressElement.textContent = text;
+                    }
+                }
+            };
+            
+            // Load the game script
+            const script = document.createElement('script');
+            script.src = 'cataclysm-tiles.js';
+            script.onload = function() {
+                console.log('Game script loaded');
+            };
+            script.onerror = function() {
+                progressElement.textContent = 'Error loading game script';
+                console.error('Failed to load cataclysm-tiles.js');
+            };
+            document.body.appendChild(script);
         }
-      };
-
-      canvas.addEventListener("click", () => {
-        settingsMenu.style.display = "none";
-      });
-
-      document.getElementById("toggle-fullscreen").onclick = () => {
-        screenfull.toggle();
-      };
-
-      document.getElementById("export-saves").onclick = async () => {
-        const zip = new JSZip();
-
-        function isRealDir(p) {
-          return p !== "." && p !== "..";
-        }
-
-        function recurse(fs_path, zip_path) {
-          const entries =
-            Module.FS.readdir(fs_path).filter(isRealDir);
-          for (const entry of entries) {
-            const entry_fs_path = fs_path + "/" + entry;
-            const entry_zip_path = zip_path + "/" + entry;
-
-            const stat = FS.stat(entry_fs_path);
-            if (FS.isDir(stat.mode)) {
-              recurse(entry_fs_path, entry_zip_path);
-            } else if (FS.isFile(stat.mode)) {
-              zip.file(
-                entry_zip_path,
-                FS.readFile(entry_fs_path, {
-                  encoding: "binary",
-                })
-              );
+        
+        function toggleFullscreen() {
+            if (!document.fullscreenElement) {
+                document.getElementById('game-container').requestFullscreen();
+            } else {
+                document.exitFullscreen();
             }
-          }
         }
-
-        recurse("/home/web_user/.cataclysm-dda", "");
-
-        saveAs(await zip.generateAsync({ type: "blob" }), "saves.zip");
-      };
-
-      var Module = {
-        preRun: [],
-        postRun: [],
-        canvas: (function () {
-          // As a default initial behavior, pop up an alert when webgl context is lost. To make your
-          // application robust, you may want to override this behavior before shipping!
-          // See http://www.khronos.org/registry/webgl/specs/latest/1.0/#5.15.2
-          canvas.addEventListener(
-            "webglcontextlost",
-            function (e) {
-              alert(
-                "WebGL context lost. You will need to reload the page."
-              );
-              e.preventDefault();
-            },
-            false
-          );
-
-          return canvas;
-        })(),
-        print: function (text) {
-          document.body.innerHTML +=
-            '<pre style="color:lime;background:black;padding:4px;white-space:pre-wrap;">OUT: ' +
-            text +
-            "</pre>";
-        },
-        printErr: function (text) {
-          document.body.innerHTML +=
-            '<pre style="color:red;background:black;padding:4px;white-space:pre-wrap;">ERR: ' +
-            text +
-            "</pre>";
-        },
-        setStatus: function (text) {
-          if (text) {
-            loadingMessage.innerHTML = text;
-          } else {
-            loadingMessage.innerHTML = "Starting...";
-          }
-        },
-        totalDependencies: 0,
-        monitorRunDependencies: function (left) {
-          this.totalDependencies = Math.max(
-            this.totalDependencies,
-            left
-          );
-          Module.setStatus(
-            left
-              ? "Preparing... (" +
-                  (this.totalDependencies - left) +
-                  "/" +
-                  this.totalDependencies +
-                  ")"
-              : "All downloads complete."
-          );
-        },
-      };
-      Module.setStatus("Downloading...");
-      window.onerror = function (event, source, lineno, colno, error) {
-        let msg = event;
-        if (typeof error === "number" && Module.getExceptionMessage) {
-          msg = Module.getExceptionMessage(error);
+        
+        function restartGame() {
+            if (Module && Module.callMain) {
+                Module.callMain([]);
+            }
         }
-        document.body.innerHTML +=
-          '<pre style="color:red;background:black;padding:10px;white-space:pre-wrap;">GAME ERROR: ' +
-          msg +
-          "\nAt: " +
-          source +
-          ":" +
-          lineno +
-          "</pre>";
-        return false;
-      };
-      window.onbeforeunload = (e) => {
-        if (window.game_unsaved)
-          e.preventDefault();
-      }
+        
+        function showHelp() {
+            alert(`
+CDDA WebAssembly Controls:
+
+Movement: Arrow keys or Numpad
+Interact: Enter
+Inventory: i
+Actions: a
+Crafting: c
+Look around: l
+Wait: .
+Quit: ESC
+
+For full controls, see the in-game help system.
+            `);
+        }
+        
+        // Start initialization
+        window.addEventListener('load', initGame);
+        
+        // Handle keyboard input
+        window.addEventListener('keydown', function(e) {
+            // Prevent default behavior for game keys
+            const gameKeys = [
+                'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
+                'Space', 'Enter', 'Escape', 'Tab',
+                'a', 'c', 'i', 'l', '.', 'e', 'q', 'r'
+            ];
+            
+            if (gameKeys.includes(e.key) || e.key.startsWith('F')) {
+                e.preventDefault();
+            }
+        });
     </script>
-    <script async type="text/javascript" src="cataclysm-tiles.data.js"></script>
-    <script async type="text/javascript" src="cataclysm-tiles.js"></script>
-  </body>
+</body>
 </html>

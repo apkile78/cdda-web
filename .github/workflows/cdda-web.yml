@@ -1,0 +1,135 @@
+name: CDDA WebAssembly Build
+
+on:
+  push:
+    tags:
+      - 'cdda-*'
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'CDDA release tag to build (e.g., cdda-0.I-2026-06-06)'
+        required: true
+        default: 'latest'
+
+env:
+  EMSCRIPTEN_VERSION: '3.1.58'
+  CDDA_REPO: 'CleverRaven/cataclysm-dda'
+  BUILD_TYPE: 'Release'
+  BUILD_TILES: 'true'
+  BUILD_SOUND: 'true'
+  BUILD_LOCALIZATION: 'false'
+
+jobs:
+  build:
+    name: Build CDDA WebAssembly
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get release tag
+        id: get_tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            if [ "${{ github.event.inputs.release_tag }}" = "latest" ]; then
+              echo "Fetching latest stable Ito release tag..."
+              TAG=$(git ls-remote --tags https://github.com/${{ env.CDDA_REPO }}.git | grep -E 'refs/tags/cdda-0\.I-[0-9]{4}-[0-9]{2}-[0-9]{2}$' | sort -V | tail -n1 | sed 's/.*\///')
+              echo "tag=$TAG" >> $GITHUB_OUTPUT
+            else
+              echo "tag=${{ github.event.inputs.release_tag }}" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          fi
+          echo "Building CDDA release: ${{ steps.get_tag.outputs.tag }}"
+
+      - name: Cache Emscripten
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/emsdk
+            ~/.emscripten_cache
+          key: emscripten-${{ env.EMSCRIPTEN_VERSION }}-${{ runner.os }}
+          restore-keys: |
+            emscripten-${{ env.EMSCRIPTEN_VERSION }}-
+
+      - name: Install Emscripten
+        run: |
+          cd ~
+          if [ ! -d "emsdk" ]; then
+            git clone https://github.com/emscripten-core/emsdk.git
+          fi
+          cd emsdk
+          git pull
+          ./emsdk install ${{ env.EMSCRIPTEN_VERSION }}
+          ./emsdk activate ${{ env.EMSCRIPTEN_VERSION }}
+
+      - name: Cache build artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            build-cache
+            cdda-source
+          key: cdda-build-${{ steps.get_tag.outputs.tag }}-${{ env.BUILD_TYPE }}-${{ env.BUILD_TILES }}-${{ env.BUILD_SOUND }}
+          restore-keys: |
+            cdda-build-${{ steps.get_tag.outputs.tag }}-
+
+      - name: Fetch CDDA release
+        run: |
+          chmod +x scripts/fetch_release.sh
+          ./scripts/fetch_release.sh "${{ steps.get_tag.outputs.tag }}"
+
+      - name: Build CDDA WebAssembly
+        run: |
+          source ~/emsdk/emsdk_env.sh
+          chmod +x scripts/build_web.sh
+          ./scripts/build_web.sh
+
+      - name: Package web build
+        run: |
+          export BUILD_VERSION="${{ steps.get_tag.outputs.tag }}"
+          export BUILD_TYPE="${{ env.BUILD_TYPE }}"
+          export BUILD_TILES="${{ env.BUILD_TILES }}"
+          export BUILD_SOUND="${{ env.BUILD_SOUND }}"
+          export BUILD_LOCALIZATION="${{ env.BUILD_LOCALIZATION }}"
+          export EMSCRIPTEN_VERSION="${{ env.EMSCRIPTEN_VERSION }}"
+          chmod +x scripts/package_web.sh
+          ./scripts/package_web.sh
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: cdda-web-${{ steps.get_tag.outputs.tag }}
+          path: web-output/
+          retention-days: 30
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./deploy
+          publish_branch: gh-pages
+          force_orphan: true
+          user_name: 'github-actions[bot]'
+          user_email: 'github-actions[bot]@users.noreply.github.com'
+          commit_message: 'Deploy CDDA Web ${{ steps.get_tag.outputs.tag }}'
+
+      - name: Create deployment summary
+        run: |
+          echo "## CDDA WebAssembly Build Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Release Tag:** \`${{ steps.get_tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Build Type:** ${{ env.BUILD_TYPE }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Tiles:** ${{ env.BUILD_TILES }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Sound:** ${{ env.BUILD_SOUND }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Localization:** ${{ env.BUILD_LOCALIZATION }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Emscripten:** ${{ env.EMSCRIPTEN_VERSION }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📦 Build Artifacts" >> $GITHUB_STEP_SUMMARY
+          echo "- cdda-web-${{ steps.get_tag.outputs.tag }} (available for download)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🌐 Deployment" >> $GITHUB_STEP_SUMMARY
+          echo "Deployed to \`gh-pages\` branch - available at GitHub Pages" >> $GITHUB_STEP_SUMMARY
