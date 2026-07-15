@@ -4,9 +4,11 @@ This repository contains the GitHub Actions workflow and scripts to build Catacl
 
 ## 📋 Overview
 
-This project automatically builds CDDA WebAssembly using the official CDDA Emscripten build scripts via GitHub Actions and deploys it to GitHub Pages. The build uses CDDA's built-in WebAssembly support:
+This project attempts to build Cataclysm: Dark Days Ahead (CDDA) as a WebAssembly application for the Ito (stable) release.
 
-- **Official build scripts**: Uses CDDA's `build-scripts/build-emscripten.sh`
+**⚠️ Important Note**: Recent CDDA versions may have limited or disabled WebAssembly support due to resource constraints (see PR #81827: "Disable huge uncacheable emscripten builds"). This build system attempts to work around these limitations, but success is not guaranteed.
+
+### Build Configuration
 - **Tiles support**: Full graphical interface
 - **Sound support**: Audio playback enabled
 - **English-only**: No localization (smaller build size)
@@ -130,7 +132,7 @@ chmod +x scripts/*.sh
 ./scripts/package_web.sh
 ```
 
-Note: The build uses CDDA's official Emscripten build scripts, which require the source code to have the necessary build infrastructure.
+**Note**: Success is not guaranteed due to potential WebAssembly build limitations in recent CDDA versions.
 
 ## 📊 Build Artifacts
 
@@ -153,6 +155,7 @@ Build artifacts are available for download from the GitHub Actions run page for 
 2. **Verify the release tag exists** in the CleverRaven/cataclysm-dda repository
 3. **Check Emscripten version compatibility** if you modify the version
 4. **Ensure you have sufficient GitHub Actions minutes**
+5. **WebAssembly build limitations**: Recent CDDA versions may have disabled or limited WebAssembly support due to resource constraints. If CMake fails with Emscripten-specific errors, this may be the cause.
 
 ### Deployment Fails
 
