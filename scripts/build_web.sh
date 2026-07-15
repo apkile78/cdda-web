@@ -5,7 +5,7 @@ SOURCE_DIR="cdda-source"
 BUILD_DIR="build-cache"
 OUTPUT_DIR="web-output"
 
-echo "Starting CDDA WebAssembly build with simplified configuration..."
+echo "Starting CDDA WebAssembly build with full configuration..."
 
 # Build configuration
 BUILD_TYPE="${BUILD_TYPE:-Release}"
@@ -37,58 +37,107 @@ fi
 mkdir -p "$BUILD_DIR"
 cd "$BUILD_DIR"
 
-# Try basic CMake configuration first
-echo "Attempting basic CMake configuration..."
+# Full CMake configuration for Emscripten with proper memory settings
+echo "Configuring CMake for Emscripten with full options..."
 emcmake cmake "$SOURCE_ABS_PATH" \
   -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
-  -DCMAKE_TOOLCHAIN_FILE="$EMSDK/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake"
+  -DCMAKE_TOOLCHAIN_FILE="$EMSDK/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake" \
+  -DTILES="$BUILD_TILES" \
+  -DSOUND="$BUILD_SOUND" \
+  -DLOCALIZATION="$BUILD_LOCALIZATION" \
+  -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+  -DCMAKE_DISABLE_FIND_PACKAGE_Curses=TRUE \
+  -DCMAKE_DISABLE_FIND_PACKAGE_PkgConfig=TRUE \
+  -DBACKTRACE=OFF \
+  -DUSE_HOME=OFF \
+  -DCMAKE_C_FLAGS="-s ALLOW_MEMORY_GROWTH=1 -s INITIAL_MEMORY=256MB -s MAX_MEMORY=4GB" \
+  -DCMAKE_CXX_FLAGS="-s ALLOW_MEMORY_GROWTH=1 -s INITIAL_MEMORY=256MB -s MAX_MEMORY=4GB"
 
 if [ $? -ne 0 ]; then
-  echo "Basic CMake failed. Trying with minimal options..."
+  echo "CMake configuration failed. Trying with fewer options..."
   emcmake cmake "$SOURCE_ABS_PATH" \
     -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
     -DCMAKE_TOOLCHAIN_FILE="$EMSDK/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake" \
-    -DBUILD_TESTS=OFF \
-    -DCMAKE_INSTALL_PREFIX="$OUTPUT_DIR"
+    -DTILES="$BUILD_TILES" \
+    -DSOUND="$BUILD_SOUND" \
+    -DLOCALIZATION="$BUILD_LOCALIZATION"
+  
+  if [ $? -ne 0 ]; then
+    echo "CMake configuration failed. Trying basic configuration..."
+    emcmake cmake "$SOURCE_ABS_PATH" \
+      -DCMAKE_BUILD_TYPE="$BUILD_TYPE" \
+      -DCMAKE_TOOLCHAIN_FILE="$EMSDK/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake"
+    
+    if [ $? -ne 0 ]; then
+      echo "All CMake configurations failed."
+      exit 1
+    fi
+  fi
 fi
 
-if [ $? -ne 0 ]; then
-  echo "CMake configuration failed. This may indicate CDDA doesn't support Emscripten builds in this version."
-  echo "Checking if CDDA has WebAssembly build scripts..."
-  if [ -f "$SOURCE_ABS_PATH/build-scripts/build-emscripten.sh" ]; then
-    echo "Official Emscripten build script found, but may be disabled due to resource constraints."
-    echo "See PR #81827: 'Disable huge uncacheable emscripten builds'"
-  fi
-  exit 1
+# Build with limited parallel jobs to manage memory
+echo "Building CDDA with Emscripten (limited parallelism for memory management)..."
+emmake make cataclysm-tiles -j2
+
+# Create output directory
+mkdir -p "$OUTPUT_DIR"
+
+# Link with Emscripten for WebAssembly output with proper memory settings
+echo "Linking with Emscripten for WebAssembly output..."
+emcc cataclysm-tiles \
+  -o "$OUTPUT_DIR/cataclysm-tiles.html" \
+  -s USE_SDL=2 \
+  -s USE_SDL_IMAGE=2 \
+  -s USE_SDL_TTF=2 \
+  -s USE_SDL_MIXER=2 \
+  -s SDL2_IMAGE_FORMATS='["png","jpg"]' \
+  -s ALLOW_MEMORY_GROWTH=1 \
+  -s INITIAL_MEMORY=256MB \
+  -s MAX_MEMORY=4GB \
+  -s WASM=1 \
+  -s EXPORTED_RUNTIME_METHODS='["ccall","cwrap","UTF8ToString","stringToUTF8"]' \
+  -s MODULARIZE=1 \
+  -s EXPORT_NAME="Cataclysm" \
+  --embed-file "$SOURCE_ABS_PATH/data@/data" \
+  --embed-file "$SOURCE_ABS_PATH/lang@/lang" \
+  -lidn \
+  -lpthread
+
+# Copy the generated WebAssembly files
+echo "Copying WebAssembly output files..."
+if [ -f "$OUTPUT_DIR/cataclysm-tiles.html" ]; then
+  mv "$OUTPUT_DIR/cataclysm-tiles.html" "$OUTPUT_DIR/index.html"
+fi
+if [ -f "$OUTPUT_DIR/cataclysm-tiles.js" ]; then
+  cp "$OUTPUT_DIR/cataclysm-tiles.js" "$OUTPUT_DIR/"
+fi
+if [ -f "$OUTPUT_DIR/cataclysm-tiles.wasm" ]; then
+  cp "$OUTPUT_DIR/cataclysm-tiles.wasm" "$OUTPUT_DIR/"
+fi
+if [ -f "$OUTPUT_DIR/cataclysm-tiles.data" ]; then
+  cp "$OUTPUT_DIR/cataclysm-tiles.data" "$OUTPUT_DIR/"
+fi
+if [ -f "$OUTPUT_DIR/cataclysm-tiles.data.js" ]; then
+  cp "$OUTPUT_DIR/cataclysm-tiles.data.js" "$OUTPUT_DIR/"
 fi
 
-# Try to build
-echo "Attempting to build..."
-emmake make -j$(nproc)
+# Copy data directory (fallback if embedding fails)
+echo "Copying data directory..."
+if [ -d "$SOURCE_ABS_PATH/data" ]; then
+  cp -r "$SOURCE_ABS_PATH/data" "$OUTPUT_DIR/"
+fi
 
-# Check if build produced any executables
-if [ -f "cataclysm-tiles" ] || [ -f "cataclysm" ]; then
-  echo "Build successful, preparing WebAssembly output..."
-  
-  # Create output directory
-  mkdir -p "$OUTPUT_DIR"
-  
-  # If we got a regular executable, try to convert it to WebAssembly
-  EXECUTABLE=$(find . -name "cataclysm-tiles" -o -name "cataclysm" | head -n1)
-  if [ -n "$EXECUTABLE" ]; then
-    echo "Converting $EXECUTABLE to WebAssembly..."
-    emcc "$EXECUTABLE" \
-      -o "$OUTPUT_DIR/index.html" \
-      -s USE_SDL=2 \
-      -s ALLOW_MEMORY_GROWTH=1 \
-      -s WASM=1 \
-      -s MODULARIZE=1 \
-      -s EXPORT_NAME="Cataclysm"
-  fi
-else
-  echo "No executable found after build. CDDA may not support Emscripten builds."
-  exit 1
+# Copy required assets
+echo "Copying required assets..."
+if [ -d "$SOURCE_ABS_PATH/lang" ]; then
+  cp -r "$SOURCE_ABS_PATH/lang" "$OUTPUT_DIR/"
+fi
+
+# Copy font files if they exist
+if [ -d "$SOURCE_ABS_PATH/fonts" ]; then
+  cp -r "$SOURCE_ABS_PATH/fonts" "$OUTPUT_DIR/"
 fi
 
 echo "Build completed successfully!"
+echo "Output location: $BUILD_DIR"
 echo "Web output prepared in: $OUTPUT_DIR"

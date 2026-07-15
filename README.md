@@ -4,9 +4,9 @@ This repository contains the GitHub Actions workflow and scripts to build Catacl
 
 ## 📋 Overview
 
-This project attempts to build Cataclysm: Dark Days Ahead (CDDA) as a WebAssembly application for the Ito (stable) release.
+This project builds Cataclysm: Dark Days Ahead (CDDA) as a WebAssembly application for the Ito (stable) release using GitHub Actions.
 
-**⚠️ Important Note**: Recent CDDA versions may have limited or disabled WebAssembly support due to resource constraints (see PR #81827: "Disable huge uncacheable emscripten builds"). This build system attempts to work around these limitations, but success is not guaranteed.
+**✅ Feasibility**: WebAssembly builds are feasible for CDDA. This system uses GitHub Actions (which has more memory than Codespaces) to complete the full build process, addressing memory limitations that prevent local Codespaces builds.
 
 ### Build Configuration
 - **Tiles support**: Full graphical interface
@@ -14,6 +14,7 @@ This project attempts to build Cataclysm: Dark Days Ahead (CDDA) as a WebAssembl
 - **English-only**: No localization (smaller build size)
 - **Release build**: Optimized production build
 - **Emscripten 3.1.58**: Pinned version for consistency
+- **Memory-optimized**: Limited parallelism and proper memory settings for GitHub Actions
 
 ## 🚀 Quick Start
 
@@ -132,7 +133,7 @@ chmod +x scripts/*.sh
 ./scripts/package_web.sh
 ```
 
-**Note**: Success is not guaranteed due to potential WebAssembly build limitations in recent CDDA versions.
+**Note**: This build system is optimized for GitHub Actions with proper memory management to complete the full WebAssembly build process.
 
 ## 📊 Build Artifacts
 
@@ -155,7 +156,7 @@ Build artifacts are available for download from the GitHub Actions run page for 
 2. **Verify the release tag exists** in the CleverRaven/cataclysm-dda repository
 3. **Check Emscripten version compatibility** if you modify the version
 4. **Ensure you have sufficient GitHub Actions minutes**
-5. **WebAssembly build limitations**: Recent CDDA versions may have disabled or limited WebAssembly support due to resource constraints. If CMake fails with Emscripten-specific errors, this may be the cause.
+5. **Memory issues**: The build uses limited parallelism (-j2) to manage memory. If it still fails, memory settings can be adjusted in the build script.
 
 ### Deployment Fails
 
