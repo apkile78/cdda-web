@@ -12,7 +12,7 @@ on:
         default: 'latest'
 
 env:
-  EMSCRIPTEN_VERSION: '3.1.58'
+  EMSCRIPTEN_VERSION: '3.1.51'
   CDDA_REPO: 'CleverRaven/cataclysm-dda'
   BUILD_TYPE: 'Release'
   BUILD_TILES: 'true'
@@ -66,6 +66,7 @@ jobs:
           git pull
           ./emsdk install ${{ env.EMSCRIPTEN_VERSION }}
           ./emsdk activate ${{ env.EMSCRIPTEN_VERSION }}
+          source ./emsdk_env.sh
 
       - name: Cache build artifacts
         uses: actions/cache@v4
@@ -110,7 +111,7 @@ jobs:
         uses: peaceiris/actions-gh-pages@v3
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./deploy
+          publish_dir: ./web-output
           publish_branch: gh-pages
           force_orphan: true
           user_name: 'github-actions[bot]'
