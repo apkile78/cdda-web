@@ -4,80 +4,66 @@ set -e
 SOURCE_DIR="cdda-source"
 OUTPUT_DIR="web-output"
 
-echo "Starting CDDA WebAssembly build using official build scripts..."
+echo "Starting CDDA WebAssembly build using official 0.I build scripts..."
 
-# Build configuration
-BUILD_TYPE="${BUILD_TYPE:-Release}"
-BUILD_TILES="${BUILD_TILES:-true}"
-BUILD_SOUND="${BUILD_SOUND:-true}"
-BUILD_LOCALIZATION="${BUILD_LOCALIZATION:-false}"
-
-echo "Build configuration:"
-echo "  Type: $BUILD_TYPE"
-echo "  Tiles: $BUILD_TILES"
-echo "  Sound: $BUILD_SOUND"
-echo "  Localization: $BUILD_LOCALIZATION"
-
-# Use absolute path for source directory
 SOURCE_ABS_PATH="$(pwd)/$SOURCE_DIR"
+OUTPUT_ABS_PATH="$(pwd)/$OUTPUT_DIR"
 echo "Source directory: $SOURCE_ABS_PATH"
+echo "Output directory: $OUTPUT_ABS_PATH"
 
-# Verify source directory exists
 if [ ! -d "$SOURCE_ABS_PATH" ]; then
   echo "Error: Source directory not found at $SOURCE_ABS_PATH"
   exit 1
 fi
 
-# Create output directory
-mkdir -p "$OUTPUT_DIR"
-
-# Change to CDDA source directory and use official build scripts
+mkdir -p "$OUTPUT_ABS_PATH"
 cd "$SOURCE_ABS_PATH"
 
-echo "Using official CDDA Emscripten build scripts..."
-
-# Prepare web data if script exists
-if [ -f "tools/emscripten/prepare-web-data.sh" ]; then
-  echo "Preparing web data..."
-  bash tools/emscripten/prepare-web-data.sh
-else
-  echo "Warning: prepare-web-data.sh not found, skipping..."
+# --- Step 1: Compile with Emscripten ---
+# As of 0.I, this script itself calls emsdk install/activate, so we don't
+# need to do that separately in the Action.
+if [ ! -f "build-scripts/build-emscripten.sh" ]; then
+  echo "ERROR: build-scripts/build-emscripten.sh not found in this source tree."
+  echo "The build layout has changed again - listing build-scripts/ for reference:"
+  ls -la build-scripts/
+  exit 1
 fi
 
-# Build with Emscripten using official Makefile
-echo "Building with Emscripten..."
-CCACHE=0 make -j4 NATIVE=emscripten BACKTRACE=0 TILES=1 TESTS=0 RUNTESTS=0 RELEASE=1 CCACHE=0 LINTJSON=0 cataclysm-tiles.js
+echo "Compiling cataclysm-tiles.js via build-scripts/build-emscripten.sh..."
+bash build-scripts/build-emscripten.sh
 
-# Copy the generated WebAssembly files to output directory
-echo "Copying WebAssembly output files..."
-if [ -f "cataclysm-tiles.js" ]; then
-  cp cataclysm-tiles.js "$OUTPUT_DIR/"
-fi
-if [ -f "cataclysm-tiles.wasm" ]; then
-  cp cataclysm-tiles.wasm "$OUTPUT_DIR/"
-fi
-if [ -f "cataclysm-tiles.data" ]; then
-  cp cataclysm-tiles.data "$OUTPUT_DIR/"
-fi
-if [ -f "cataclysm-tiles.data.js" ]; then
-  cp cataclysm-tiles.data.js "$OUTPUT_DIR/"
+# --- Step 2: Package data + assemble the real web bundle ---
+# As of 0.I this single script handles EVERYTHING that used to be split
+# across prepare-web-data.sh / prepare-web.sh in the 2024 version:
+#   - stages data/gfx into web_bundle/, stripping obsolete mods
+#   - runs emscripten's file_packager to produce cataclysm-tiles.data(.js)
+#   - copies the OFFICIAL build-data/web/index.html, font, and favicon
+#   - drops everything into a "build/" folder
+if [ ! -f "build-scripts/prepare-web.sh" ]; then
+  echo "ERROR: build-scripts/prepare-web.sh not found in this source tree."
+  exit 1
 fi
 
-# Copy data directory (for runtime assets)
-echo "Copying data directory..."
-if [ -d "data" ]; then
-  cp -r data "$OUTPUT_DIR/"
+echo "Packaging data and assembling web bundle via build-scripts/prepare-web.sh..."
+bash build-scripts/prepare-web.sh
+
+# --- Step 3: Copy the official build/ output straight to OUTPUT_DIR ---
+# We deliberately do NOT use a custom index.html or manually copy data/ here -
+# prepare-web.sh already produced the correct, complete, official bundle.
+if [ ! -d "build" ]; then
+  echo "ERROR: prepare-web.sh did not produce a build/ directory as expected."
+  exit 1
 fi
 
-# Copy lang directory if localization is enabled
-if [ "$BUILD_LOCALIZATION" = "true" ] && [ -d "lang" ]; then
-  cp -r lang "$OUTPUT_DIR/"
-fi
+echo "Copying official web bundle to output..."
+cp -r build/. "$OUTPUT_ABS_PATH/"
 
-# Copy sound directory if sound is enabled
-if [ "$BUILD_SOUND" = "true" ] && [ -d "sound" ]; then
-  cp -r sound "$OUTPUT_DIR/"
-fi
+# --- Sanity check ---
+for f in cataclysm-tiles.js cataclysm-tiles.wasm cataclysm-tiles.data cataclysm-tiles.data.js index.html; do
+  if [ ! -f "$OUTPUT_ABS_PATH/$f" ]; then
+    echo "WARNING: expected file missing from output: $f"
+  fi
+done
 
 echo "Build completed successfully!"
-echo "Web output prepared in: $OUTPUT_DIR"
+echo "Web output prepared in: $OUTPUT_ABS_PATH"
