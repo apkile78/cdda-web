@@ -11,9 +11,11 @@ if [ ! -d "$OUTPUT_DIR" ]; then
   exit 1
 fi
 
-# NOTE: We do NOT use a custom index.html here.
-# The build script modifies the generated index.html from CDDA's official build
-# to work with MODULARIZE, so we use the official one that stays in sync.
+# NOTE: We deliberately do NOT copy a custom index.html here anymore.  
+# build-scripts/prepare-web.sh (run in build_web.sh) already copies CDDA's  
+# own official build-data/web/index.html into the output. That page loads  
+# cataclysm-tiles.data.js BEFORE cataclysm-tiles.js in the correct order -  
+# a custom page that skips loading .data.js will hang forever on load.
 
 # Create a nojekyll file to prevent GitHub Pages from processing
 touch "$OUTPUT_DIR/.nojekyll"
