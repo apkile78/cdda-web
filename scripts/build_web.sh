@@ -65,12 +65,37 @@ for f in cataclysm-tiles.js cataclysm-tiles.wasm cataclysm-tiles.data cataclysm-
   fi
 done
 
-# Post-processing: Inject coi-serviceworker for cross-origin isolation
-echo "Injecting coi-serviceworker for cross-origin isolation..."
-if [ -f "$OUTPUT_ABS_PATH/coi-serviceworker.min.js" ]; then
-  echo "coi-serviceworker already present, skipping injection"
+# Post-processing: Modify generated index.html to work with MODULARIZE
+echo "Modifying generated index.html for MODULARIZE support..."
+if [ -f "$OUTPUT_ABS_PATH/index.html" ]; then
+  # Patch the generated index.html to use modularized factory pattern
+  # This replaces the legacy Module pattern with Cataclysm(moduleConfig).then()
+  sed -i 's/var Module = {/var moduleConfig = {/' "$OUTPUT_ABS_PATH/index.html"
+  sed -i 's/Module\.setStatus/moduleConfig.setStatus/g' "$OUTPUT_ABS_PATH/index.html"
+  sed -i 's/Module\.totalDependencies/moduleConfig.totalDependencies/g' "$OUTPUT_ABS_PATH/index.html"
+  sed -i 's/Module\.monitorRunDependencies/moduleConfig.monitorRunDependencies/g' "$OUTPUT_ABS_PATH/index.html"
+  
+  # Add the factory call after the Module definition
+  # This is a complex replacement, so we'll append the factory initialization
+  cat >> "$OUTPUT_ABS_PATH/index.html" << 'EOF'
+
+    <script type="text/javascript">
+      // Initialize modularized Emscripten output
+      if (typeof Cataclysm !== 'undefined') {
+        Cataclysm(moduleConfig).then(instance => {
+          window.gameInstance = instance;
+          console.log("Game initialized successfully");
+        }).catch(error => {
+          console.error("Failed to initialize game:", error);
+          alert("Failed to load game: " + error.message);
+        });
+      }
+    </script>
+EOF
+  
+  echo "index.html modified for MODULARIZE support"
 else
-  echo "Warning: coi-serviceworker.min.js not found in output"
+  echo "Warning: index.html not found in output"
 fi
 
 echo "Build completed successfully!"
