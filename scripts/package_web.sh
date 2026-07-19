@@ -11,11 +11,13 @@ if [ ! -d "$OUTPUT_DIR" ]; then
   exit 1
 fi
 
-# NOTE: We deliberately do NOT copy a custom index.html here anymore.
-# build-scripts/prepare-web.sh (run in build_web.sh) already copies CDDA's
-# own official build-data/web/index.html into the output. That page loads
-# cataclysm-tiles.data.js BEFORE cataclysm-tiles.js in the correct order -
-# a custom page that skips loading .data.js will hang forever on load.
+# Use custom index.html if it exists in the root
+if [ -f "index.html" ]; then
+  echo "Using custom index.html launcher with MODULARIZE support..."
+  cp index.html "$OUTPUT_DIR/"
+  # Remove the auto-generated HTML file if it exists
+  rm -f "$OUTPUT_DIR/cataclysm-tiles.html"
+fi
 
 # Create a nojekyll file to prevent GitHub Pages from processing
 touch "$OUTPUT_DIR/.nojekyll"
@@ -58,7 +60,7 @@ EOF
 
 # Verify critical files exist
 echo "Verifying critical files..."
-CRITICAL_FILES=("cataclysm-tiles.js" "cataclysm-tiles.wasm" "cataclysm-tiles.data" "cataclysm-tiles.data.js" "index.html")
+CRITICAL_FILES=("cataclysm-tiles.js" "cataclysm-tiles.wasm" "cataclysm-tiles.data" "cataclysm-tiles.data.js" "index.html" "coi-serviceworker.min.js")
 for file in "${CRITICAL_FILES[@]}"; do
   if [ ! -f "$OUTPUT_DIR/$file" ]; then
     echo "Warning: Critical file $file not found in web output directory"

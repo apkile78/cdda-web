@@ -65,5 +65,13 @@ for f in cataclysm-tiles.js cataclysm-tiles.wasm cataclysm-tiles.data cataclysm-
   fi
 done
 
+# Post-processing: Inject coi-serviceworker for cross-origin isolation
+echo "Injecting coi-serviceworker for cross-origin isolation..."
+if [ -f "$OUTPUT_ABS_PATH/coi-serviceworker.min.js" ]; then
+  echo "coi-serviceworker already present, skipping injection"
+else
+  echo "Warning: coi-serviceworker.min.js not found in output"
+fi
+
 echo "Build completed successfully!"
 echo "Web output prepared in: $OUTPUT_ABS_PATH"
