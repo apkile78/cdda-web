@@ -71,7 +71,12 @@ for f in cataclysm-tiles.js cataclysm-tiles.wasm cataclysm-tiles.data cataclysm-
     echo "WARNING: expected file missing from output: $f"  
   fi  
 done  
-  
+
+  # Ship coi-serviceworker so GitHub Pages gets cross-origin isolation  
+# (required for SharedArrayBuffer / pthreads used by world gen).  
+echo "Injecting coi-serviceworker for cross-origin isolation..."  
+cp "$OLDPWD/coi-serviceworker.min.js" "$OUTPUT_ABS_PATH/"  
+sed -i 's#<head>#<head><script src="coi-serviceworker.min.js"></script>#' "$OUTPUT_ABS_PATH/index.html"
 echo "Build completed successfully!"  
 echo "Web output prepared in: $OUTPUT_ABS_PATH"
 echo "Build completed successfully!"
