@@ -26,5 +26,5 @@
   var cw = console.warn;  
   console.warn = function () { log("WARN", Array.prototype.join.call(arguments, " ")); return cw.apply(console, arguments); };  
   var al = window.alert;  
-  window.alert = function (m) { log("ALERT", m); /* native popup suppressed; call al(m) here if you still want it */ };  
-})();  
+  window.alert = function (m) { log("ALERT", m); };  
+})();
