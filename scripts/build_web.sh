@@ -7,7 +7,8 @@ OUTPUT_DIR="web-output"
 echo "Starting CDDA WebAssembly build using official 0.I build scripts..."  
   
 # Capture the repo checkout root BEFORE we cd into the source tree, so we can  
-# reliably find the vendored coi-serviceworker.min.js later.  
+# reliably find vendored files (coi-serviceworker.min.js, error-overlay.js,  
+# and the patched mmap_file.cpp) later.  
 REPO_ROOT="$(pwd)"  
   
 SOURCE_ABS_PATH="$(pwd)/$SOURCE_DIR"  
@@ -22,6 +23,24 @@ fi
   
 mkdir -p "$OUTPUT_ABS_PATH"  
 cd "$SOURCE_ABS_PATH"  
+  
+# --- Step 0: Apply our patched mmap_file.cpp into the fetched source ---  
+# The mmap crash during world gen is INSIDE the compiled engine (.wasm), so it  
+# can only be fixed in C++. We keep just the one patched file at the repo root  
+# and drop it into the downloaded source here, right before compiling, so the  
+# compiler builds OUR version instead of the stock one.  
+if [ ! -f "$REPO_ROOT/mmap_file.cpp" ]; then  
+  echo "ERROR: patched mmap_file.cpp not found at repo root ($REPO_ROOT)."  
+  exit 1  
+fi  
+if [ ! -f "src/mmap_file.cpp" ]; then  
+  echo "ERROR: src/mmap_file.cpp not found in fetched source - layout changed."  
+  echo "Listing src/ for reference:"  
+  ls -la src/ | head -n 40  
+  exit 1  
+fi  
+echo "Applying patched mmap_file.cpp into src/..."  
+cp "$REPO_ROOT/mmap_file.cpp" "src/mmap_file.cpp"  
   
 # --- Step 1: Compile with Emscripten ---  
 if [ ! -f "build-scripts/build-emscripten.sh" ]; then  
@@ -53,8 +72,8 @@ echo "Copying official web bundle to output..."
 cp -r build/. "$OUTPUT_ABS_PATH/"  
   
 # --- Sanity check ---  
-for f in cataclysm-tiles.js cataclysm-tiles.wasm cataclysm-tiles.data cataclysm-tiles.data.js index.html coi-serviceworker.min.js; do  
-  if [ ! -f "$OUTPUT_ABS_PATH/$f" ] && [ "$f" != "coi-serviceworker.min.js" ]; then  
+for f in cataclysm-tiles.js cataclysm-tiles.wasm cataclysm-tiles.data cataclysm-tiles.data.js index.html; do  
+  if [ ! -f "$OUTPUT_ABS_PATH/$f" ]; then  
     echo "WARNING: expected file missing from output: $f"  
   fi  
 done  
@@ -71,17 +90,18 @@ if [ -f "$OUTPUT_ABS_PATH/index.html" ]; then
   cp "$REPO_ROOT/coi-serviceworker.min.js" "$OUTPUT_ABS_PATH/"  
   sed -i 's#<head>#<head><script src="coi-serviceworker.min.js"></script>#' "$OUTPUT_ABS_PATH/index.html"  
   
-  # 2) Visible error console so exceptions show ON THE PAGE (no DevTools).  
-  #    Vendored as a real file to avoid sed-escaping bugs (previous inline  
-  #    version emitted a broken \&\& and a literal \n -> SyntaxError).  
+  # 2) Visible error console (no DevTools). Vendored as a real .js file so the  
+  #    build never has to embed multi-line JS through sed (that "\n" is exactly  
+  #    what caused the SyntaxError at :178). Injected first in <head> so it is  
+  #    active before any game code runs.  
   if [ ! -f "$REPO_ROOT/error-overlay.js" ]; then  
     echo "ERROR: error-overlay.js not found at repo root ($REPO_ROOT)."  
     exit 1  
   fi  
   cp "$REPO_ROOT/error-overlay.js" "$OUTPUT_ABS_PATH/"  
-  sed -i 's#<head>#<head><script src="error-overlay.js"></script>#' "$OUTPUT_ABS_PATH/index.html"
+  sed -i 's#<head>#<head><script src="error-overlay.js"></script>#' "$OUTPUT_ABS_PATH/index.html"  
   
-  echo "index.html post-processed (coi + error overlay + probe)"  
+  echo "index.html post-processed (coi + error overlay)"  
 else  
   echo "Warning: index.html not found in output"  
 fi  
