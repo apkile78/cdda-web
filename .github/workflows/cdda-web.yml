@@ -57,17 +57,15 @@ jobs:
       - name: Install and verify ccache  
         run: |  
           sudo apt-get update  
-          sudo apt-get install -y ccache  
-          which ccache  
-          ccache --version  
-          # Sensible cache size so it actually holds a full CDDA compile.  
-          ccache -M 2G  
-  
-      # Persist ccache's compiled-object store between runs. The FIRST build  
-      # fills it (still full length); later builds reuse it and are much faster.  
-      - name: Cache ccache  
-        uses: actions/cache@v4  
-        with:  
+  - name: Install Emscripten  
+        run: |  
+          cd ~  
+          rm -rf emsdk  
+          git clone https://github.com/emscripten-core/emsdk.git  
+          cd emsdk  
+          ./emsdk install ${{ env.EMSCRIPTEN_VERSION }}  
+          ./emsdk activate ${{ env.EMSCRIPTEN_VERSION }}  
+          source ./emsdk_env.sh        with:  
           path: ~/.ccache  
           key: ccache-${{ steps.get_tag.outputs.tag }}-${{ env.BUILD_TYPE }}  
           restore-keys: |  
