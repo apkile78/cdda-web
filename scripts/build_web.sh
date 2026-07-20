@@ -72,13 +72,14 @@ if [ -f "$OUTPUT_ABS_PATH/index.html" ]; then
   sed -i 's#<head>#<head><script src="coi-serviceworker.min.js"></script>#' "$OUTPUT_ABS_PATH/index.html"  
   
   # 2) Visible error console so exceptions show ON THE PAGE (no DevTools).  
-  #    All CSS colors use rgb() and styles are inlined via style.cssText so  
-  #    there are NO '#' characters in the sed replacement (delimiter is '#').  
-  #    '&&' is escaped as '\&\&' because '&' is special in sed replacements.  
-  sed -i 's#</head>#<script>(function(){function box(){var d=document.getElementById("erroroverlay");if(!d){d=document.createElement("div");d.id="erroroverlay";d.style.cssText="position:fixed;left:0;right:0;bottom:0;max-height:40%;overflow:auto;background:rgb(17,17,17);color:rgb(255,85,85);font:12px monospace;white-space:pre-wrap;z-index:99999;padding:6px;border-top:2px solid rgb(255,85,85)";(document.body||document.documentElement).appendChild(d);}return d;}function log(p,m){box().textContent+=p+": "+m+"\n";}window.addEventListener("error",function(e){log("JS ERROR",(e.message||e.error)+" @ "+e.filename+":"+e.lineno);});window.addEventListener("unhandledrejection",function(e){log("PROMISE",(e.reason\&\&e.reason.message)||e.reason);});var ce=console.error;console.error=function(){log("ERR",Array.prototype.join.call(arguments," "));ce.apply(console,arguments);};})();</script></head>#' "$OUTPUT_ABS_PATH/index.html"  
-  
-  # 3) No-DevTools isolation probe in the tab title.  
-  sed -i 's#</body>#<script>document.title="COI="+self.crossOriginIsolated;</script></body>#' "$OUTPUT_ABS_PATH/index.html"  
+  #    Vendored as a real file to avoid sed-escaping bugs (previous inline  
+  #    version emitted a broken \&\& and a literal \n -> SyntaxError).  
+  if [ ! -f "$REPO_ROOT/error-overlay.js" ]; then  
+    echo "ERROR: error-overlay.js not found at repo root ($REPO_ROOT)."  
+    exit 1  
+  fi  
+  cp "$REPO_ROOT/error-overlay.js" "$OUTPUT_ABS_PATH/"  
+  sed -i 's#<head>#<head><script src="error-overlay.js"></script>#' "$OUTPUT_ABS_PATH/index.html"
   
   echo "index.html post-processed (coi + error overlay + probe)"  
 else  
