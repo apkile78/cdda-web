@@ -12,7 +12,7 @@ on:
         required: true  
         default: 'latest'  
   
-# Lets the build push the finished site to the gh-pages branch.  
+# Lets the deploy job push the finished site to the gh-pages branch.  
 permissions:  
   contents: write  
   
@@ -25,9 +25,15 @@ env:
   BUILD_LOCALIZATION: 'false'  
   
 jobs:  
+  # ===================================================================  
+  # JOB 1: BUILD  (the long ~3h compile). Ends by uploading the finished  
+  # web-output/ folder as an artifact the deploy job can pick up.  
+  # ===================================================================  
   build:  
     name: Build CDDA WebAssembly  
     runs-on: ubuntu-latest  
+    outputs:  
+      tag: ${{ steps.get_tag.outputs.tag }}  
   
     steps:  
       - name: Checkout repository  
@@ -55,10 +61,7 @@ jobs:
         run: |  
           sudo apt-get update  
           sudo apt-get install -y ccache  
-          # Prove it is really there before anything tries to use it.  
           ccache --version  
-          # Give the cache a generous size so a full CDDA build fits.  
-          ccache -M 5G  
   
       - name: Install Emscripten (clean)  
         run: |  
@@ -72,14 +75,14 @@ jobs:
           ./emsdk install ${{ env.EMSCRIPTEN_VERSION }}  
           ./emsdk activate ${{ env.EMSCRIPTEN_VERSION }}  
           source ./emsdk_env.sh  
-          # Fail early (before the 3h compile) if the toolchain is broken.  
+          # Fail early (before the long compile) if the toolchain is broken.  
           emcc --version  
   
-      - name: Cache ccache (compiled C++ reuse)  
+      - name: Cache ccache (compiler output cache)  
         uses: actions/cache@v4  
         with:  
           path: ~/.ccache  
-          key: ccache-${{ steps.get_tag.outputs.tag }}-${{ env.BUILD_TYPE }}-${{ env.BUILD_TILES }}-${{ env.BUILD_SOUND }}  
+          key: ccache-${{ steps.get_tag.outputs.tag }}-${{ github.sha }}  
           restore-keys: |  
             ccache-${{ steps.get_tag.outputs.tag }}-  
             ccache-  
@@ -100,19 +103,17 @@ jobs:
           ./scripts/fetch_release.sh "${{ steps.get_tag.outputs.tag }}"  
   
       - name: Build CDDA WebAssembly  
-        env:  
-          # Turn ON CDDA's own ccache support (the build log showed CCACHE=0).  
-          CCACHE: '1'  
-          CCACHE_DIR: /home/runner/.ccache  
         run: |  
           source ~/emsdk/emsdk_env.sh  
-          # Show the cache state BEFORE the build (first run: empty).  
-          ccache --show-stats || true  
+          # Turn ON CDDA's built-in ccache (your log showed CCACHE=0).  
+          export CCACHE=1  
+          export PATH="/usr/lib/ccache:$PATH"  
+          export CCACHE_DIR="$HOME/.ccache"  
+          export CCACHE_MAXSIZE=5G  
           chmod +x scripts/build_web.sh  
           ./scripts/build_web.sh  
-          # Show the cache state AFTER the build. On the 2nd run the  
-          # "cache hit" number here should be high.  
-          ccache --show-stats || true  
+          echo "----- ccache stats after build -----"  
+          ccache --show-stats  
   
       - name: Package web build  
         run: |  
@@ -125,12 +126,28 @@ jobs:
           chmod +x scripts/package_web.sh  
           ./scripts/package_web.sh  
   
-      - name: Upload build artifacts  
+      - name: Upload site artifact (hand-off to deploy job)  
         uses: actions/upload-artifact@v4  
         with:  
-          name: cdda-web-${{ steps.get_tag.outputs.tag }}  
+          name: cdda-web-site  
           path: web-output/  
           retention-days: 30  
+  
+  # ===================================================================  
+  # JOB 2: DEPLOY  (seconds). Downloads the finished site and publishes  
+  # it to gh-pages. Re-runnable on its own without recompiling.  
+  # ===================================================================  
+  deploy:  
+    name: Deploy to GitHub Pages  
+    needs: build  
+    runs-on: ubuntu-latest  
+  
+    steps:  
+      - name: Download site artifact  
+        uses: actions/download-artifact@v4  
+        with:  
+          name: cdda-web-site  
+          path: web-output  
   
       - name: Deploy to GitHub Pages  
         uses: peaceiris/actions-gh-pages@v3  
@@ -141,21 +158,10 @@ jobs:
           force_orphan: true  
           user_name: 'github-actions[bot]'  
           user_email: 'github-actions[bot]@users.noreply.github.com'  
-          commit_message: 'Deploy CDDA Web ${{ steps.get_tag.outputs.tag }}'  
+          commit_message: 'Deploy CDDA Web ${{ needs.build.outputs.tag }}'  
   
       - name: Create deployment summary  
         run: |  
-          echo "## CDDA WebAssembly Build Complete" >> $GITHUB_STEP_SUMMARY  
-          echo "" >> $GITHUB_STEP_SUMMARY  
-          echo "**Release Tag:** \`${{ steps.get_tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY  
-          echo "**Build Type:** ${{ env.BUILD_TYPE }}" >> $GITHUB_STEP_SUMMARY  
-          echo "**Tiles:** ${{ env.BUILD_TILES }}" >> $GITHUB_STEP_SUMMARY  
-          echo "**Sound:** ${{ env.BUILD_SOUND }}" >> $GITHUB_STEP_SUMMARY  
-          echo "**Localization:** ${{ env.BUILD_LOCALIZATION }}" >> $GITHUB_STEP_SUMMARY  
-          echo "**Emscripten:** ${{ env.EMSCRIPTEN_VERSION }}" >> $GITHUB_STEP_SUMMARY  
-          echo "" >> $GITHUB_STEP_SUMMARY  
-          echo "### Build Artifacts" >> $GITHUB_STEP_SUMMARY  
-          echo "- cdda-web-${{ steps.get_tag.outputs.tag }} (available for download)" >> $GITHUB_STEP_SUMMARY  
-          echo "" >> $GITHUB_STEP_SUMMARY  
-          echo "### Deployment" >> $GITHUB_STEP_SUMMARY  
+          echo "## CDDA WebAssembly Deploy Complete" >> $GITHUB_STEP_SUMMARY  
+          echo "**Release Tag:** \`${{ needs.build.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY  
           echo "Deployed to \`gh-pages\` branch - available at GitHub Pages" >> $GITHUB_STEP_SUMMARY
