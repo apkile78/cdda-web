@@ -12,7 +12,7 @@ on:
         required: true  
         default: 'latest'  
   
-# Allow the built-in token to push to the gh-pages branch.  
+# Needed so the GITHUB_TOKEN can push the built site to the gh-pages branch.  
 permissions:  
   contents: write  
   
@@ -28,9 +28,6 @@ jobs:
   build:  
     name: Build CDDA WebAssembly  
     runs-on: ubuntu-latest  
-    # Expose the resolved tag so the deploy job can reuse it.  
-    outputs:  
-      tag: ${{ steps.get_tag.outputs.tag }}  
   
     steps:  
       - name: Checkout repository  
@@ -44,7 +41,7 @@ jobs:
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then  
             if [ "${{ github.event.inputs.release_tag }}" = "latest" ]; then  
               echo "Fetching latest stable Ito release tag..."  
-              TAG=$(git ls-remote --tags https://github.com/${{ env.CDDA_REPO }}.git | grep -E 'refs/tags/0\.[A-Z]$' | sort -V | tail -n1 | sed 's/.*\///')  
+              TAG=$(git ls-remote --tags https://github.com/${{ env.CDDA_REPO }}.git | grep -E 'refs/tags/0\.[A-Z]$' | sed 's#.*/##' | sort -V | tail -n1)  
               echo "tag=$TAG" >> $GITHUB_OUTPUT  
             else  
               echo "tag=${{ github.event.inputs.release_tag }}" >> $GITHUB_OUTPUT  
@@ -54,12 +51,28 @@ jobs:
           fi  
           echo "Building CDDA release: ${{ steps.get_tag.outputs.tag }}"  
   
-      - name: Install ccache  
+      # Install ccache FIRST, before anything references it as a compiler  
+      # wrapper. If this step fails, the build stops here instead of later  
+      # crashing emcc with a missing-binary (os.execv) error.  
+      - name: Install and verify ccache  
         run: |  
           sudo apt-get update  
           sudo apt-get install -y ccache  
-          ccache --max-size=2G  
-          ccache --zero-stats  
+          which ccache  
+          ccache --version  
+          # Sensible cache size so it actually holds a full CDDA compile.  
+          ccache -M 2G  
+  
+      # Persist ccache's compiled-object store between runs. The FIRST build  
+      # fills it (still full length); later builds reuse it and are much faster.  
+      - name: Cache ccache  
+        uses: actions/cache@v4  
+        with:  
+          path: ~/.ccache  
+          key: ccache-${{ steps.get_tag.outputs.tag }}-${{ env.BUILD_TYPE }}  
+          restore-keys: |  
+            ccache-${{ steps.get_tag.outputs.tag }}-  
+            ccache-  
   
       - name: Cache Emscripten  
         uses: actions/cache@v4  
@@ -83,16 +96,7 @@ jobs:
           ./emsdk activate ${{ env.EMSCRIPTEN_VERSION }}  
           source ./emsdk_env.sh  
   
-      - name: Cache ccache compiler cache  
-        uses: actions/cache@v4  
-        with:  
-          path: ~/.ccache  
-          key: ccache-${{ steps.get_tag.outputs.tag }}-${{ env.BUILD_TYPE }}-${{ env.BUILD_TILES }}-${{ env.BUILD_SOUND }}-${{ github.run_id }}  
-          restore-keys: |  
-            ccache-${{ steps.get_tag.outputs.tag }}-${{ env.BUILD_TYPE }}-${{ env.BUILD_TILES }}-${{ env.BUILD_SOUND }}-  
-            ccache-${{ steps.get_tag.outputs.tag }}-  
-  
-      - name: Cache CDDA source  
+      - name: Cache build artifacts  
         uses: actions/cache@v4  
         with:  
           path: |  
@@ -108,13 +112,12 @@ jobs:
           ./scripts/fetch_release.sh "${{ steps.get_tag.outputs.tag }}"  
   
       - name: Build CDDA WebAssembly  
+        env:  
+          # Route emcc's underlying clang through ccache. Safe now because the  
+          # "Install and verify ccache" step guaranteed the binary exists.  
+          EM_COMPILER_WRAPPER: ccache  
         run: |  
           source ~/emsdk/emsdk_env.sh  
-          # Route every compile through ccache (the photocopy box).  
-          export CCACHE_DIR="$HOME/.ccache"  
-          export EM_COMPILER_WRAPPER=ccache  
-          export CMAKE_CXX_COMPILER_LAUNCHER=ccache  
-          export CMAKE_C_COMPILER_LAUNCHER=ccache  
           chmod +x scripts/build_web.sh  
           ./scripts/build_web.sh  
           echo "----- ccache stats after build -----"  
@@ -138,20 +141,6 @@ jobs:
           path: web-output/  
           retention-days: 30  
   
-  deploy:  
-    name: Deploy to GitHub Pages  
-    needs: build  
-    runs-on: ubuntu-latest  
-    permissions:  
-      contents: write  
-  
-    steps:  
-      - name: Download build artifacts  
-        uses: actions/download-artifact@v4  
-        with:  
-          name: cdda-web-${{ needs.build.outputs.tag }}  
-          path: web-output  
-  
       - name: Deploy to GitHub Pages  
         uses: peaceiris/actions-gh-pages@v3  
         with:  
@@ -161,21 +150,21 @@ jobs:
           force_orphan: true  
           user_name: 'github-actions[bot]'  
           user_email: 'github-actions[bot]@users.noreply.github.com'  
-          commit_message: 'Deploy CDDA Web ${{ needs.build.outputs.tag }}'  
+          commit_message: 'Deploy CDDA Web ${{ steps.get_tag.outputs.tag }}'  
   
       - name: Create deployment summary  
         run: |  
           echo "## CDDA WebAssembly Build Complete" >> $GITHUB_STEP_SUMMARY  
           echo "" >> $GITHUB_STEP_SUMMARY  
-          echo "**Release Tag:** \`${{ needs.build.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY  
+          echo "**Release Tag:** \`${{ steps.get_tag.outputs.tag }}\`" >> $GITHUB_STEP_SUMMARY  
           echo "**Build Type:** ${{ env.BUILD_TYPE }}" >> $GITHUB_STEP_SUMMARY  
           echo "**Tiles:** ${{ env.BUILD_TILES }}" >> $GITHUB_STEP_SUMMARY  
           echo "**Sound:** ${{ env.BUILD_SOUND }}" >> $GITHUB_STEP_SUMMARY  
           echo "**Localization:** ${{ env.BUILD_LOCALIZATION }}" >> $GITHUB_STEP_SUMMARY  
           echo "**Emscripten:** ${{ env.EMSCRIPTEN_VERSION }}" >> $GITHUB_STEP_SUMMARY  
           echo "" >> $GITHUB_STEP_SUMMARY  
-          echo "### Build Artifacts" >> $GITHUB_STEP_SUMMARY  
-          echo "- cdda-web-${{ needs.build.outputs.tag }} (available for download)" >> $GITHUB_STEP_SUMMARY  
+          echo "### 📦 Build Artifacts" >> $GITHUB_STEP_SUMMARY  
+          echo "- cdda-web-${{ steps.get_tag.outputs.tag }} (available for download)" >> $GITHUB_STEP_SUMMARY  
           echo "" >> $GITHUB_STEP_SUMMARY  
-          echo "### Deployment" >> $GITHUB_STEP_SUMMARY  
+          echo "### 🌐 Deployment" >> $GITHUB_STEP_SUMMARY  
           echo "Deployed to \`gh-pages\` branch - available at GitHub Pages" >> $GITHUB_STEP_SUMMARY
