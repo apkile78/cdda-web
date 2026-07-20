@@ -12,7 +12,7 @@ on:
         required: true  
         default: 'latest'  
   
-# Needed so the GITHUB_TOKEN can push the built site to the gh-pages branch.  
+# Lets the build push the finished site to the gh-pages branch.  
 permissions:  
   contents: write  
   
@@ -51,48 +51,20 @@ jobs:
           fi  
           echo "Building CDDA release: ${{ steps.get_tag.outputs.tag }}"  
   
-      # Install ccache FIRST, before anything references it as a compiler  
-      # wrapper. If this step fails, the build stops here instead of later  
-      # crashing emcc with a missing-binary (os.execv) error.  
-      - name: Install and verify ccache  
-        run: |  
-          sudo apt-get update  
-  - name: Install Emscripten  
+      - name: Install Emscripten (clean)  
         run: |  
           cd ~  
+          # Always start from a completely fresh emsdk. A half-restored or  
+          # partially-installed toolchain is what caused the recurring  
+          # "emcc ... os.execv FileNotFoundError" on the freetype/imgui ports.  
           rm -rf emsdk  
           git clone https://github.com/emscripten-core/emsdk.git  
           cd emsdk  
           ./emsdk install ${{ env.EMSCRIPTEN_VERSION }}  
           ./emsdk activate ${{ env.EMSCRIPTEN_VERSION }}  
-          source ./emsdk_env.sh        with:  
-          path: ~/.ccache  
-          key: ccache-${{ steps.get_tag.outputs.tag }}-${{ env.BUILD_TYPE }}  
-          restore-keys: |  
-            ccache-${{ steps.get_tag.outputs.tag }}-  
-            ccache-  
-  
-      - name: Cache Emscripten  
-        uses: actions/cache@v4  
-        with:  
-          path: |  
-            ~/emsdk  
-            ~/.emscripten_cache  
-          key: emscripten-${{ env.EMSCRIPTEN_VERSION }}-${{ runner.os }}  
-          restore-keys: |  
-            emscripten-${{ env.EMSCRIPTEN_VERSION }}-  
-  
-      - name: Install Emscripten  
-        run: |  
-          cd ~  
-          if [ ! -d "emsdk" ]; then  
-            git clone https://github.com/emscripten-core/emsdk.git  
-          fi  
-          cd emsdk  
-          git pull  
-          ./emsdk install ${{ env.EMSCRIPTEN_VERSION }}  
-          ./emsdk activate ${{ env.EMSCRIPTEN_VERSION }}  
           source ./emsdk_env.sh  
+          # Fail early (before the 3h compile) if the toolchain is broken.  
+          emcc --version  
   
       - name: Cache build artifacts  
         uses: actions/cache@v4  
@@ -110,16 +82,10 @@ jobs:
           ./scripts/fetch_release.sh "${{ steps.get_tag.outputs.tag }}"  
   
       - name: Build CDDA WebAssembly  
-        env:  
-          # Route emcc's underlying clang through ccache. Safe now because the  
-          # "Install and verify ccache" step guaranteed the binary exists.  
-          EM_COMPILER_WRAPPER: ccache  
         run: |  
           source ~/emsdk/emsdk_env.sh  
           chmod +x scripts/build_web.sh  
           ./scripts/build_web.sh  
-          echo "----- ccache stats after build -----"  
-          ccache --show-stats  
   
       - name: Package web build  
         run: |  
@@ -161,8 +127,8 @@ jobs:
           echo "**Localization:** ${{ env.BUILD_LOCALIZATION }}" >> $GITHUB_STEP_SUMMARY  
           echo "**Emscripten:** ${{ env.EMSCRIPTEN_VERSION }}" >> $GITHUB_STEP_SUMMARY  
           echo "" >> $GITHUB_STEP_SUMMARY  
-          echo "### 📦 Build Artifacts" >> $GITHUB_STEP_SUMMARY  
+          echo "### Build Artifacts" >> $GITHUB_STEP_SUMMARY  
           echo "- cdda-web-${{ steps.get_tag.outputs.tag }} (available for download)" >> $GITHUB_STEP_SUMMARY  
           echo "" >> $GITHUB_STEP_SUMMARY  
-          echo "### 🌐 Deployment" >> $GITHUB_STEP_SUMMARY  
+          echo "### Deployment" >> $GITHUB_STEP_SUMMARY  
           echo "Deployed to \`gh-pages\` branch - available at GitHub Pages" >> $GITHUB_STEP_SUMMARY
