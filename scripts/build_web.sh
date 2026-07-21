@@ -41,9 +41,6 @@ if [ ! -f "src/mmap_file.cpp" ]; then
 fi  
 echo "Applying patched mmap_file.cpp into src/..."  
 cp "$REPO_ROOT/mmap_file.cpp" "src/mmap_file.cpp"  
-
-echo "Bumping emscripten release OPTLEVEL from -O3 to -Os..."  
-sed -i '426s/OPTLEVEL = -Os/OPTLEVEL = -Os/' Makefile  
   
 echo "Bumping emscripten link-time LDFLAGS from -Os to -O2..."  
 sed -i '699s/LDFLAGS += -Os/LDFLAGS += -O2/' Makefile
