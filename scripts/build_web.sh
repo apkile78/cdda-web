@@ -41,6 +41,9 @@ if [ ! -f "src/mmap_file.cpp" ]; then
 fi  
 echo "Applying patched mmap_file.cpp into src/..."  
 cp "$REPO_ROOT/mmap_file.cpp" "src/mmap_file.cpp"  
+
+echo "Bumping emscripten release OPTLEVEL from -Os to -O2..."  
+sed -i '426s/OPTLEVEL = -Os/OPTLEVEL = -O2/' Makefile
   
 # --- Step 1: Compile with Emscripten ---  
 if [ ! -f "build-scripts/build-emscripten.sh" ]; then  
