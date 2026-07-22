@@ -41,9 +41,6 @@ if [ ! -f "src/mmap_file.cpp" ]; then
 fi  
 echo "Applying patched mmap_file.cpp into src/..."  
 cp "$REPO_ROOT/mmap_file.cpp" "src/mmap_file.cpp"  
-
-echo "Bumping emscripten link-time LDFLAGS from -Os to -O2..."  
-sed -i '699s/LDFLAGS += -Os/LDFLAGS += -O2/' Makefile
   
 # --- Step 1: Compile with Emscripten ---  
 if [ ! -f "build-scripts/build-emscripten.sh" ]; then  
