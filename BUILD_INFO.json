@@ -1,0 +1,8 @@
+{
+  "build_date": "2026-08-21T18:04:25Z",
+  "build_type": "Release",
+  "tiles": "true",
+  "sound": "true",
+  "localization": "false",
+  "emscripten_version": "3.1.51"
+}
