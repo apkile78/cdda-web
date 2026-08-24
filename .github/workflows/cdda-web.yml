@@ -103,20 +103,6 @@ jobs:
           chmod +x scripts/fetch_release.sh  
           ./scripts/fetch_release.sh "${{ steps.get_tag.outputs.tag }}" 
           
-      - name: Vendor source for indexing  
-        run: |  
-          git config user.name  'github-actions[bot]'  
-          git config user.email 'github-actions[bot]@users.noreply.github.com'  
-          git checkout --orphan cdda-src  
-          git rm -rf --cached . >/dev/null 2>&1 || true  
-          rm -rf src_vendor  
-          cp -r cdda-source/src src_vendor  
-          find . -maxdepth 1 -mindepth 1 ! -name src_vendor ! -name .git -exec rm -rf {} +  
-          mv src_vendor src  
-          git add -f src  
-          git commit -m "Vendor CDDA ${{ steps.get_tag.outputs.tag }} src for indexing" || echo "no changes"  
-          git push -f origin cdda-src
-          
       - name: Build CDDA WebAssembly  
         env:  
           CCACHE: 1  
